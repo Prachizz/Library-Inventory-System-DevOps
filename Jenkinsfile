@@ -41,11 +41,11 @@ pipeline {
                 stage('Setup AWS CLI') {
                     steps {
                         withCredentials([usernamePassword(credentialsId: 'aws-orange-credentials', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                            bat """
-                            "${env.AWS_CLI_PATH}" configure set aws_access_key_id %AWS_ACCESS_KEY_ID% --profile orange
-                            "${env.AWS_CLI_PATH}" configure set aws_secret_access_key %AWS_SECRET_ACCESS_KEY% --profile orange
-                            "${env.AWS_CLI_PATH}" configure set region us-west-2 --profile orange
-                            """
+                           sh '''
+    aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID" --profile orange
+    aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY" --profile orange
+    aws configure set region us-west-2 --profile orange
+'''
                         }
                     }
                 }
