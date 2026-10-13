@@ -34,9 +34,7 @@ pipeline {
                stage('Create Results Directory') {
                     steps {
                         script {
-                            bat """
-                                if not exist ${RESULTS_DIR} mkdir ${RESULTS_DIR}
-                            """
+                            sh 'mkdir -p results'
                         }
                     }
                 }
