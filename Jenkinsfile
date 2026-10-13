@@ -74,13 +74,15 @@ pipeline {
                 stage('Code Quality Checks') {
                     stages {
 
+
                         stage('Flake8') {
                             steps {
                                 sh '''
-                                    .venv/bin/python -m flake8 . \
-                                      --exclude=.venv,__pycache__,.git \
-                                      --output-file=results/flake8.log \
-                                      --tee
+                                    set -e
+                                    .venv/bin/python -m black app.py tests/
+                                    .venv/bin/python -m flake8 app.py tests/ \
+                                        --output-file=results/flake8.log \
+                                        --tee
                                 '''
                             }
                             post {
@@ -90,6 +92,7 @@ pipeline {
                                 }
                             }
                         }
+
 
 
                         stage('Black') {
