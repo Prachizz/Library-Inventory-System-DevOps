@@ -5,9 +5,9 @@ pipeline {
         DOCKER_IMAGE = 'orange18036/team3-library'
         DOCKER_IMAGE_GHCR = 'ghcr.io/orange18036/team3-library'
         DOCKER_CREDENTIALS = 'dockerhub-credentials'
-        KUBECONFIG_PATH = 'kubeconfig'
+        KUBECONFIG_PATH = "${WORKSPACE}/kubeconfig"
         TERRAFORM_EXEC_PATH = "${terraform}"
-        TERRAFORM_CONFIG_PATH = "${env.WORKSPACE}/terraform"
+        TERRAFORM_CONFIG_PATH = "${WORKSPACE}/terraform"
         AWS_CLI_PATH = "${aws}"
         KUBECTL_PATH = "${kubectl}"
         NAMESPACE = 'team3'
@@ -20,7 +20,7 @@ pipeline {
         Python_path = "${python}"
         TERRASCAN_PATH = "${terrascan}"
         INFRACOST_PATH = "${infracost}"
-        RESULTS_DIR = "${env.WORKSPACE}/results"
+        RESULTS_DIR = "${WORKSPACE}/results"
     }
 
     options {
@@ -38,6 +38,18 @@ pipeline {
                         }
                     }
                 }
+                
+                stage('Setup Python Environment') {
+                    steps {
+                        sh '''
+                            set -eu
+                            python3 -m venv .venv
+                            .venv/bin/python -m pip install --upgrade pip
+                            .venv/bin/python -m pip install flake8 black pytest pytest-cov coverage
+                        '''
+                    }
+                }
+
                 stage('Setup AWS CLI') {
                     steps {
                         withCredentials([usernamePassword(credentialsId: 'aws-orange-credentials', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
@@ -61,73 +73,71 @@ pipeline {
 
                 stage('Code Quality Checks') {
                     stages {
+
                         stage('Flake8') {
                             steps {
-                                script {
-                                    sh '''
-                                        python3 -m pip install flake8
-                                        python3 -m flake8 . > results/flake8.log || true
-                                    '''
-                                }
+                                sh '''
+                                    .venv/bin/python -m flake8 . --output-file=results/flake8.log
+                                '''
                             }
                             post {
                                 always {
-                                    archiveArtifacts artifacts: "${RESULTS_DIR}\\flake8.log", allowEmptyArchive: true
+                                    archiveArtifacts artifacts: 'results/flake8.log',
+                                        allowEmptyArchive: true
                                 }
                             }
                         }
+
 
                         stage('Black') {
                             steps {
-                                script {
-                                    sh '''
-                                        python3 -m pip install black
-                                        python3 -m black --check . > results/black.log || true
-                                    '''
-                                }
+                                sh '''
+                                    .venv/bin/python -m black --check . > results/black.log 2>&1
+                                '''
                             }
                             post {
                                 always {
-                                    archiveArtifacts artifacts: "${RESULTS_DIR}\\black.log", allowEmptyArchive: true
+                                    archiveArtifacts artifacts: 'results/black.log',
+                                        allowEmptyArchive: true
                                 }
                             }
                         }
 
+                        
                         stage('Pytest') {
                             steps {
-                                script {
-                                   sh '''
-    python3 -m pip install pytest
-    python3 -m pytest --junitxml=results/test-results.xml || true
-'''
-                                }
+                                sh '''
+                                    .venv/bin/python -m pytest --junitxml=results/test-results.xml
+                                '''
                             }
                             post {
                                 always {
-                                    archiveArtifacts artifacts: "${RESULTS_DIR}\\test-results.xml", allowEmptyArchive: true
+                                    archiveArtifacts artifacts: 'results/test-results.xml',
+                                        allowEmptyArchive: true
+                                    junit testResults: 'results/test-results.xml',
+                                        allowEmptyResults: true
                                 }
                             }
                         }
-                    }
-                }
 
-                stage('Unit Test Coverage') {
-                    steps {
-                        script {
-                            bat """
-                                ${env.Python_path} -m pip install coverage
-                                ${env.Python_path} -m coverage run -m pytest
-                                ${env.Python_path} -m coverage report -m > ${RESULTS_DIR}\\coverage.txt
-                                ${env.Python_path} -m coverage xml -o ${RESULTS_DIR}\\coverage.xml
-                            """
+
+
+                        stage('Unit Test Coverage') {
+                            steps {
+                                sh '''
+                                    .venv/bin/python -m coverage run -m pytest
+                                    .venv/bin/python -m coverage report -m > results/coverage.txt
+                                    .venv/bin/python -m coverage xml -o results/coverage.xml
+                                '''
+                            }
+                            post {
+                                always {
+                                    archiveArtifacts artifacts: 'results/coverage.*',
+                                        allowEmptyArchive: true
+                                }
+                            }
                         }
-                    }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: "${RESULTS_DIR}\\coverage.*", allowEmptyArchive: true
-                        }
-                    }
-                }
+
 
 
                 stage('Scan Docker Image with Trivy') {
