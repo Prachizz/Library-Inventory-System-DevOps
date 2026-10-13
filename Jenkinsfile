@@ -75,23 +75,26 @@ pipeline {
                     stages {
 
 
-                        stage('Flake8') {
-                            steps {
-                                sh '''
-                                    set -e
-                                    .venv/bin/python -m black app.py tests/
-                                    .venv/bin/python -m flake8 app.py tests/ \
-                                        --output-file=results/flake8.log \
-                                        --tee
-                                '''
-                            }
-                            post {
-                                always {
-                                    archiveArtifacts artifacts: 'results/flake8.log',
-                                        allowEmptyArchive: true
-                                }
-                            }
+
+                stage('Flake8') {
+                    steps {
+                        sh '''
+                            set -e
+                            .venv/bin/python -m black --line-length 100 app.py tests/
+                            .venv/bin/python -m flake8 app.py tests/ \
+                                --max-line-length=100 \
+                                --output-file=results/flake8.log \
+                                --tee
+                        '''
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'results/flake8.log',
+                                allowEmptyArchive: true
                         }
+                    }
+                }
+
 
 
 
