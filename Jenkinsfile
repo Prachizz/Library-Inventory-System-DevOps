@@ -42,10 +42,10 @@ pipeline {
                     steps {
                         withCredentials([usernamePassword(credentialsId: 'aws-orange-credentials', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                            sh '''
-    aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID" --profile orange
-    aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY" --profile orange
-    aws configure set region us-west-2 --profile orange
-'''
+                                aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID" --profile orange
+                                aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY" --profile orange
+                                aws configure set region us-west-2 --profile orange
+                        '''
                         }
                     }
                 }
@@ -64,10 +64,10 @@ pipeline {
                         stage('Flake8') {
                             steps {
                                 script {
-                                    bat """
-                                        ${env.Python_path} -m pip install flake8
-                                        ${env.Python_path} -m flake8 . > ${RESULTS_DIR}\\flake8.log || exit 0
-                                    """
+                                    sh '''
+                                        python3 -m pip install flake8
+                                        python3 -m flake8 . > results/flake8.log || true
+                                    '''
                                 }
                             }
                             post {
@@ -80,10 +80,10 @@ pipeline {
                         stage('Black') {
                             steps {
                                 script {
-                                    bat """
-                                        ${env.Python_path} -m pip install black
-                                        ${env.Python_path} -m black --check . > ${RESULTS_DIR}\\black.log || exit 0
-                                    """
+                                    sh '''
+                                        python3 -m pip install black
+                                        python3 -m black --check . > results/black.log || true
+                                    '''
                                 }
                             }
                             post {
@@ -96,10 +96,10 @@ pipeline {
                         stage('Pytest') {
                             steps {
                                 script {
-                                    bat """
-                                        ${env.Python_path} -m pip install pytest
-                                        ${env.Python_path} -m pytest --junitxml=${RESULTS_DIR}\\test-results.xml || exit 0
-                                    """
+                                   sh '''
+    python3 -m pip install pytest
+    python3 -m pytest --junitxml=results/test-results.xml || true
+'''
                                 }
                             }
                             post {
