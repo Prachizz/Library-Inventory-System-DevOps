@@ -77,7 +77,10 @@ pipeline {
                         stage('Flake8') {
                             steps {
                                 sh '''
-                                    .venv/bin/python -m flake8 . --output-file=results/flake8.log --tee
+                                    .venv/bin/python -m flake8 . \
+                                      --exclude=.venv,__pycache__,.git \
+                                      --output-file=results/flake8.log \
+                                      --tee
                                 '''
                             }
                             post {
