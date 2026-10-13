@@ -7,7 +7,7 @@ pipeline {
         DOCKER_CREDENTIALS = 'dockerhub-credentials'
         KUBECONFIG_PATH = 'kubeconfig'
         TERRAFORM_EXEC_PATH = "${terraform}"
-        TERRAFORM_CONFIG_PATH = "${env.WORKSPACE}\\terraform"
+        TERRAFORM_CONFIG_PATH = "${env.WORKSPACE}/terraform"
         AWS_CLI_PATH = "${aws}"
         KUBECTL_PATH = "${kubectl}"
         NAMESPACE = 'team3'
@@ -16,11 +16,11 @@ pipeline {
         GRAFANA_ADMIN_PASSWORD = 'admin'
         PROMETHEUS_SCRAPE_INTERVAL = '30s'
         GITHUB_TOKEN = credentials('github-token')
-        TRIVY_RESULTS_FILE = "results\\trivy-results.txt"
+        TRIVY_RESULTS_FILE = "results/trivy-results.txt"
         Python_path = "${python}"
         TERRASCAN_PATH = "${terrascan}"
         INFRACOST_PATH = "${infracost}"
-        RESULTS_DIR = "${env.WORKSPACE}\\results"
+        RESULTS_DIR = "${env.WORKSPACE}/results"
     }
 
     options {
@@ -54,7 +54,7 @@ pipeline {
                     steps {
                         script {
                             echo "Building Docker image ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                            bat "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
+                            sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
                         }
                     }
                 }
