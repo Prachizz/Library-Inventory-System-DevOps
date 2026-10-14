@@ -156,32 +156,31 @@ pipeline {
 
 
 
-                    stage('Scan Docker Image with Trivy') {
-                        steps {
-                            script {
-                                sh '''
-                                    set -eu
-                                    mkdir -p results
-                                    trivy image \
-                                        --format table \
-                                        --output results/trivy-results.txt \
-                                        "$DOCKER_IMAGE:$BUILD_NUMBER"
-                                    cat results/trivy-results.txt
-                                '''
-                            }
-                        }
-                        post {
-                            always {
-                                archiveArtifacts(
-                                    artifacts: 'results/trivy-results.txt',
-                                    allowEmptyArchive: true
-                                )
-                            }
+
+                stage('Scan Docker Image with Trivy') {
+                    steps {
+                        sh '''
+                            set -eu
+                            mkdir -p results
+                
+                            trivy --config "" image \
+                                --ignorefile /dev/null \
+                                --format table \
+                                --output results/trivy-results.txt \
+                                "$DOCKER_IMAGE:$BUILD_NUMBER"
+                
+                            cat results/trivy-results.txt
+                        '''
+                    }
+                    post {
+                        always {
+                            archiveArtifacts(
+                                artifacts: 'results/trivy-results.txt',
+                                allowEmptyArchive: true
+                            )
                         }
                     }
-
-
-               
+                }
 
 
                 stage('Security Scanning with Terrascan') {
