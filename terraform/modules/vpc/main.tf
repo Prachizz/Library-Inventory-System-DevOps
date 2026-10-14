@@ -62,17 +62,14 @@ resource "aws_subnet" "private_subnet_b" {
 }
 
 
+
 resource "aws_security_group" "eks_control_plane_sg" {
   name        = "${var.team_prefix}_eks_control_plane_sg"
   description = "Security group for EKS control plane"
   vpc_id      = aws_vpc.team_vpc.id
 
-  ingress {
-    from_port   = 5000
-    to_port     = 5000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # No unrestricted inbound ports.
+  # Add only required control-plane rules after verifying usage.
 
   egress {
     from_port   = 0
@@ -85,6 +82,7 @@ resource "aws_security_group" "eks_control_plane_sg" {
     Name = "${var.team_prefix}_eks_control_plane_sg"
   }
 }
+
 
 resource "aws_security_group" "eks_nodes_sg" {
   name        = "${var.team_prefix}_eks_nodes_sg"
