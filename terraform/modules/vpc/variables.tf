@@ -32,3 +32,13 @@ variable "cluster_name" {
   description = "The name of the EKS cluster for tagging purposes."
   type        = string
 }
+
+variable "public_subnet_ids" {
+  description = "Subnet IDs for the EKS cluster and node group"
+  type        = list(string)
+}
+
+variable "eks_control_plane_sg_id" {
+  description = "Security group ID for the EKS control plane"
+  type        = string
+}
