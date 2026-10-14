@@ -18,7 +18,6 @@ resource "aws_iam_role" "eks_cluster_role" {
     "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
     "arn:aws:iam::aws:policy/AmazonEKSServicePolicy",
     "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController",
-    "arn:aws:iam::aws:policy/AdministratorAccess"
   ]
 }
 
@@ -42,8 +41,6 @@ resource "aws_iam_role" "eks_nodes_role" {
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
     "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-    "arn:aws:iam::aws:policy/AmazonEC2FullAccess",
-    "arn:aws:iam::aws:policy/AdministratorAccess"
   ]
 }
 
@@ -57,6 +54,14 @@ resource "aws_eks_cluster" "library_cluster" {
     subnet_ids         = var.public_subnet_ids
     security_group_ids = [var.eks_control_plane_sg_id]
   }
+
+  enabled_cluster_log_types = [
+    "api",
+    "audit",
+    "authenticator",
+    "controllerManager",
+    "scheduler"
+  ]
 
   timeouts {
     create = "30m"
