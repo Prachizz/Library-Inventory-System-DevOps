@@ -109,7 +109,7 @@ class LibraryAppTestCase(unittest.TestCase):
     def test_404_error(self):
         response = self.app.get('/nonexistent_page')
         self.assertEqual(response.status_code, 404)
-        self.assertIn(b'404 Error', response.data)
+        self.assertIn(b"404 - Page Not Found", response.data)
 
 if __name__ == '__main__':
     unittest.main()
