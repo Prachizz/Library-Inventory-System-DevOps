@@ -1,6 +1,31 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category if category in ['success', 'danger', 'warning', 'info'] else 'info' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="row mb-4">
+  <div class="col">
+    <form class="form-inline" method="POST" action="{{ url_for('search_book') }}">
+      <input class="form-control mr-sm-2" type="search" placeholder="Search" aria-label="Search" name="title">
+      <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Search</button>
+    </form>
+  </div>
+</div>
+
+<!-- Keep the rest of your existing HTML unchanged -->
+
 <div class="row mb-4">
   <div class="col">
     <form class="form-inline" method="POST" action="{{ url_for('search_book') }}">
