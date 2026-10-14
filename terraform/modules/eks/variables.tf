@@ -62,3 +62,8 @@ variable "private_subnet_ids" {
   description = "List of private subnet IDs for the EKS cluster."
   type        = list(string)
 }
+
+variable "eks_nodes_sg_id" {
+  description = "Security group ID for EKS worker nodes."
+  type        = string
+}
