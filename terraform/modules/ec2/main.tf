@@ -4,17 +4,19 @@ resource "aws_security_group" "public_ec2_sg" {
   vpc_id      = var.vpc_id
 
   ingress {
+    description = "SSH from trusted IP only"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["103.109.13.18/32"]
   }
 
   ingress {
+    description = "Jenkins from trusted IP only"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["103.109.13.18/32"]
   }
 
   egress {
@@ -33,6 +35,11 @@ resource "aws_instance" "public_ec2" {
   count = var.manage_ec2 ? 1 : 0
   ami                    = "ami-0aff18ec83b712f05"
   instance_type          = "t3.medium"
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+  monitoring = true
   key_name               = "orange"
   associate_public_ip_address = true
 
