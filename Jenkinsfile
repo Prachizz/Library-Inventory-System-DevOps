@@ -101,7 +101,9 @@ pipeline {
                         stage('Black') {
                             steps {
                                 sh '''
-                                    .venv/bin/python -m black --check . > results/black.log 2>&1
+                                    set -e
+                                    .venv/bin/python -m black --check --line-length 100 app.py tests/ \
+                                        2>&1 | tee results/black.log
                                 '''
                             }
                             post {
