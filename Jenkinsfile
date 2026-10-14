@@ -39,16 +39,19 @@ pipeline {
                     }
                 }
                 
+
                 stage('Setup Python Environment') {
                     steps {
                         sh '''
                             set -eu
                             python3 -m venv .venv
                             .venv/bin/python -m pip install --upgrade pip
+                            .venv/bin/python -m pip install -r requirements.txt
                             .venv/bin/python -m pip install flake8 black pytest pytest-cov coverage
                         '''
                     }
                 }
+
 
                 stage('Setup AWS CLI') {
                     steps {
