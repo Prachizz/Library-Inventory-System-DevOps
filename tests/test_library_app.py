@@ -19,8 +19,9 @@ class LibraryAppTestCase(unittest.TestCase):
             "borrowed_books": []
         }
         self.test_db = 'data/test_library.json'
-        app.config['DataBase'] = self.test_db
-
+        app.config['DATABASE'] = self.test_db
+        os.makedirs(os.path.dirname(self.test_db), exist_ok=True)
+        
         # Ensure the test database file is created
         with open(self.test_db, 'w') as f:
             json.dump(self.test_data, f, indent=4)
