@@ -240,150 +240,299 @@ pipeline {
 
         stage('CD: Deploy') {
             stages {
+                
                 stage('Terraform Init and Apply') {
                     steps {
                         dir("${env.TERRAFORM_CONFIG_PATH}") {
-                            bat """
-                            set AWS_PROFILE=orange
-                            "${env.TERRAFORM_EXEC_PATH}" init
-                            "${env.TERRAFORM_EXEC_PATH}" apply -auto-approve
-                            """
+                            sh '''
+                                set -eu
+                                export AWS_PROFILE=orange
+                                terraform init
+                                terraform validate
+                                terraform plan -out=tfplan
+                            '''
                         }
                     }
                 }
+
+
 
                 stage('Extract EKS Cluster Name') {
                     steps {
                         script {
                             dir("${env.TERRAFORM_CONFIG_PATH}") {
-                                env.EKS_CLUSTER_NAME = bat(script: """
-                                    @echo off
-                                    "${env.TERRAFORM_EXEC_PATH}" output -raw eks_cluster_name
-                                """, returnStdout: true).trim()
+                                env.EKS_CLUSTER_NAME = sh(
+                                    script: '"$TERRAFORM_EXEC_PATH" output -raw eks_cluster_name',
+                                    returnStdout: true
+                                ).trim()
+                
                                 echo "EKS Cluster Name is set to ${env.EKS_CLUSTER_NAME}"
                             }
                         }
                     }
                 }
 
+
+
                 stage('Configure Kubeconfig') {
                     steps {
                         script {
                             echo "Configuring kubeconfig for EKS Cluster: ${env.EKS_CLUSTER_NAME}"
-                            bat """
-                                "${env.AWS_CLI_PATH}" eks update-kubeconfig --region us-west-2 --name "${env.EKS_CLUSTER_NAME}" --kubeconfig "${env.WORKSPACE}\\${KUBECONFIG_PATH}" --profile orange
-                            """
-                            env.KUBECONFIG = "${env.WORKSPACE}\\${KUBECONFIG_PATH}"
+                
+                            sh '''
+                                set -eu
+                                aws eks update-kubeconfig \
+                                    --region us-west-2 \
+                                    --name "$EKS_CLUSTER_NAME" \
+                                    --kubeconfig "$WORKSPACE/kubeconfig" \
+                                    --profile orange
+                            '''
+                
+                            env.KUBECONFIG = "${env.WORKSPACE}/kubeconfig"
                             echo "KUBECONFIG is set to ${env.KUBECONFIG}"
                         }
                     }
                 }
 
+
+
                 stage('Push Docker Image to Docker Hub') {
                     steps {
                         script {
                             echo "Pushing Docker image ${DOCKER_IMAGE}:${env.BUILD_NUMBER} to Docker Hub"
-                            withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS}", passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
-                                bat """
-                                echo Logging into Docker Hub...
-                                docker login -u %DOCKER_USERNAME% -p %DOCKER_PASSWORD%
-                                docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest
-                                docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
-                                docker push ${DOCKER_IMAGE}:latest
-                                """
-                            }                            
+                
+                            withCredentials([
+                                usernamePassword(
+                                    credentialsId: "${DOCKER_CREDENTIALS}",
+                                    usernameVariable: 'DOCKER_USERNAME',
+                                    passwordVariable: 'DOCKER_PASSWORD'
+                                )
+                            ]) {
+                                sh '''
+                                    set -eu
+                                    echo "$DOCKER_PASSWORD" | docker login \
+                                        --username "$DOCKER_USERNAME" \
+                                        --password-stdin
+                
+                                    docker tag "$DOCKER_IMAGE:$BUILD_NUMBER" "$DOCKER_IMAGE:latest"
+                                    docker push "$DOCKER_IMAGE:$BUILD_NUMBER"
+                                    docker push "$DOCKER_IMAGE:latest"
+                
+                                    docker logout
+                                '''
+                            }
                         }
                     }
                 }
+
 
                 stage('Push Docker Image to GitHub Container Registry') {
                     steps {
                         script {
-                            withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
-                                bat """
-                                docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ghcr.io/abdelrahman18036/library-inventory-team3:${env.BUILD_NUMBER}
-                                echo ${env.GITHUB_TOKEN} | docker login ghcr.io -u abdelrahman18036 --password-stdin
-                                docker push ghcr.io/abdelrahman18036/library-inventory-team3:${env.BUILD_NUMBER}
-                                """
+                            withCredentials([
+                                string(
+                                    credentialsId: 'github-token',
+                                    variable: 'GHCR_TOKEN'
+                                )
+                            ]) {
+                                sh '''
+                                    set -eu
+                
+                                    echo "$GHCR_TOKEN" | docker login ghcr.io \
+                                        --username Prachizz \
+                                        --password-stdin
+                
+                                    docker tag "$DOCKER_IMAGE:$BUILD_NUMBER" \
+                                        "$DOCKER_IMAGE_GHCR:$BUILD_NUMBER"
+                
+                                    docker push "$DOCKER_IMAGE_GHCR:$BUILD_NUMBER"
+                
+                                    docker logout ghcr.io
+                                '''
                             }
                         }
                     }
                 }
+
+
 
                 stage('Update Kubernetes Manifests and Push Results') {
                     steps {
                         script {
-                            git(url: 'https://github.com/abdelrahman18036/library-inventory-team3.git', branch: 'main', changelog: false, poll: false)
-
-                            bat "powershell -Command \"(Get-Content ${env.WORKSPACE}\\k8s\\deployment.yaml) -replace 'image: .*', 'image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}' | Set-Content ${env.WORKSPACE}\\k8s\\deployment.yaml\""
-
+                            // Checkout your forked repository
+                            git(
+                                url: 'https://github.com/Prachizz/Library-Inventory-System-DevOps.git',
+                                branch: 'main',
+                                changelog: false,
+                                poll: false
+                            )
+                
+                            // Update the Kubernetes deployment image
+                            sh '''
+                                set -eu
+                
+                                sed -i "s|^[[:space:]]*image:.*|          image: ${DOCKER_IMAGE}:${BUILD_NUMBER}|" \
+                                    k8s/deployment.yaml
+                            '''
+                
+                            // Check whether Git detected any changes
                             def changes = sh(
                                 script: 'git status --porcelain',
                                 returnStdout: true
                             ).trim()
-                            
+                
                             if (changes) {
-                                echo "Changes detected; committing updates."
-                            } else {
-                                echo "No changes to commit."
-                            }
-
-                            if (hasChanges) {
-                                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
-                                    bat """
+                                echo 'Changes detected; committing updates.'
+                
+                                withCredentials([
+                                    string(
+                                        credentialsId: 'github-token',
+                                        variable: 'GH_TOKEN'
+                                    )
+                                ]) {
+                                    sh '''
+                                        set -eu
+                
                                         git config user.name "Jenkins CI"
                                         git config user.email "jenkins@orange.com"
-                                        git add ${env.WORKSPACE}\\k8s\\deployment.yaml
-                                        git add ${env.WORKSPACE}\\results\\*
-                                        git commit -m "Update deployment to use image ${DOCKER_IMAGE}:${env.BUILD_NUMBER} and push results"
-                                        git push https://%GITHUB_TOKEN%@github.com/abdelrahman18036/library-inventory-team3.git HEAD:main
-                                    """
+                
+                                        git add k8s/deployment.yaml
+                
+                                        if [ -d results ]; then
+                                            git add results/
+                                        fi
+                
+                                        if ! git diff --cached --quiet; then
+                                            git commit -m "Update deployment image to ${BUILD_NUMBER}"
+                
+                                            git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\\n')" \
+                                                push origin HEAD:main
+                                        else
+                                            echo "No staged changes to commit."
+                                        fi
+                                    '''
                                 }
                             } else {
-                                echo "No changes to commit"
+                                echo 'No changes to commit.'
                             }
                         }
                     }
                 }
+
+
 
                 stage('Deploy to Kubernetes') {
                     steps {
                         script {
                             echo "Deploying to Kubernetes namespace: ${NAMESPACE}"
-                            bat """
-                                "${env.KUBECTL_PATH}" create namespace ${NAMESPACE} --dry-run=client -o yaml | "${env.KUBECTL_PATH}" apply -f -
-                                "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\persistent-volume.yaml -n ${NAMESPACE}
-                                "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\persistent-volume-claim.yaml -n ${NAMESPACE}
-                                "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\deployment.yaml -n ${NAMESPACE}
-                                "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\service.yaml -n ${NAMESPACE}
-                            """
-                            // "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\prometheus-server-service.yaml -n ${NAMESPACE}
-                            // "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\pv-prometheus-alertmanager.yaml -n ${NAMESPACE}
+                
+                            sh '''
+                                set -eu
+                
+                                export KUBECONFIG="$WORKSPACE/kubeconfig"
+                
+                                kubectl create namespace "$NAMESPACE" \
+                                    --dry-run=client -o yaml | kubectl apply -f -
+                
+                                for file in \
+                                    k8s/persistent-volume.yaml \
+                                    k8s/persistent-volume-claim.yaml \
+                                    k8s/deployment.yaml \
+                                    k8s/service.yaml
+                                do
+                                    if [ ! -f "$WORKSPACE/$file" ]; then
+                                        echo "ERROR: Manifest not found: $WORKSPACE/$file"
+                                        exit 1
+                                    fi
+                                done
+                
+                                kubectl apply -f "$WORKSPACE/k8s/persistent-volume.yaml"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/persistent-volume-claim.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/deployment.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/service.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl get pods -n "$NAMESPACE"
+                                kubectl get services -n "$NAMESPACE"
+                            '''
                         }
                     }
                 }
+
+
 
                 stage('Deploy Grafana and Prometheus') {
                     steps {
                         script {
-                            echo "Deploying Grafana to Kubernetes namespace: ${NAMESPACE}"
-                            bat """
-                            "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\prometheus\\prometheus-clusterrole.yaml -n ${NAMESPACE}
-                            "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\prometheus\\prometheus-clusterrolebinding.yaml -n ${NAMESPACE}
-                            "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\monitoring\\prometheus-pvc.yaml -n ${NAMESPACE}
-                            "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\prometheus\\prometheus-config.yaml -n ${NAMESPACE}
-                            "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\prometheus\\prometheus-deployment.yaml -n ${NAMESPACE}
-                            "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\prometheus\\prometheus-service.yaml -n ${NAMESPACE}  
-                            """
-                            echo "Deploying Grafana to Kubernetes namespace: ${NAMESPACE}"
-                            bat """
-                            "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\grafana\\grafana-deployment.yaml -n ${NAMESPACE}
-                            "${env.KUBECTL_PATH}" apply -f ${env.WORKSPACE}\\k8s\\grafana\\grafana-service.yaml -n ${NAMESPACE}
-                            """
-
+                            echo "Deploying Prometheus and Grafana to ${NAMESPACE}"
+                
+                            sh '''
+                                set -eu
+                
+                                export KUBECONFIG="$WORKSPACE/kubeconfig"
+                
+                                files="
+                                k8s/prometheus/prometheus-clusterrole.yaml
+                                k8s/prometheus/prometheus-clusterrolebinding.yaml
+                                k8s/monitoring/prometheus-pvc.yaml
+                                k8s/prometheus/prometheus-config.yaml
+                                k8s/prometheus/prometheus-deployment.yaml
+                                k8s/prometheus/prometheus-service.yaml
+                                k8s/grafana/grafana-deployment.yaml
+                                k8s/grafana/grafana-service.yaml
+                                "
+                
+                                for file in $files; do
+                                    if [ ! -f "$WORKSPACE/$file" ]; then
+                                        echo "ERROR: Manifest not found: $WORKSPACE/$file"
+                                        exit 1
+                                    fi
+                                done
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/prometheus/prometheus-clusterrole.yaml"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/prometheus/prometheus-clusterrolebinding.yaml"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/monitoring/prometheus-pvc.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/prometheus/prometheus-config.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/prometheus/prometheus-deployment.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/prometheus/prometheus-service.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/grafana/grafana-deployment.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl apply \
+                                    -f "$WORKSPACE/k8s/grafana/grafana-service.yaml" \
+                                    -n "$NAMESPACE"
+                
+                                kubectl get pods -n "$NAMESPACE"
+                            '''
                         }
                     }
                 }
+
 
                 // stage('Deploy with Helm') {
                 //     steps {
