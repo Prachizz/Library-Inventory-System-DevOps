@@ -1,8 +1,7 @@
 import unittest
 import os
 import json
-#from flask import Flask
-#from app import app, load_data, save_data, DataBase
+from app import app, load_data, save_data
 
 class LibraryAppTestCase(unittest.TestCase):
 
