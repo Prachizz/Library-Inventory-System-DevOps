@@ -101,38 +101,37 @@ pipeline {
 
 
 
-                        stage('Black') {
-                            steps {
-                                sh '''
-                                    set -e
-                                    .venv/bin/python -m black --check --line-length 100 app.py tests/ \
-                                        2>&1 | tee results/black.log
-                                '''
-                            }
-                            post {
-                                always {
-                                    archiveArtifacts artifacts: 'results/black.log',
-                                        allowEmptyArchive: true
-                                }
-                            }
+                stage('Black') {
+                    steps {
+                        sh '''
+                            set -e
+                            .venv/bin/python -m black --check --line-length 100 app.py tests/ \
+                                2>&1 | tee results/black.log                                '''
+                    }                        
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'results/black.log',
+                                allowEmptyArchive: true
                         }
+                    }                                            
+                }
 
                         
-                        stage('Pytest') {
-                            steps {
-                                sh '''
-                                    .venv/bin/python -m pytest --junitxml=results/test-results.xml
-                                '''
-                            }
-                            post {
-                                always {
-                                    archiveArtifacts artifacts: 'results/test-results.xml',
-                                        allowEmptyArchive: true
-                                    junit testResults: 'results/test-results.xml',
-                                        allowEmptyResults: true
+                            stage('Pytest') {
+                                steps {
+                                    sh '''
+                                        .venv/bin/python -m pytest --junitxml=results/test-results.xml
+                                    '''
+                                }
+                                post {
+                                    always {
+                                        archiveArtifacts artifacts: 'results/test-results.xml',
+                                            allowEmptyArchive: true
+                                        junit testResults: 'results/test-results.xml',
+                                            allowEmptyResults: true
+                                    }
                                 }
                             }
-                        }
 
 
 
@@ -156,71 +155,86 @@ pipeline {
 
 
 
-                stage('Scan Docker Image with Trivy') {
-                    steps {
-                        script {
-                            echo "Scanning Docker image ${DOCKER_IMAGE}:${env.BUILD_NUMBER} with Trivy"
-                            bat """
-                                    "${env.TRIVY_PATH}" image --format table --output ${TRIVY_RESULTS_FILE} ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
-                                    type ${TRIVY_RESULTS_FILE}
-                                """
-                            
-                            // Optional: Fail the build if Trivy finds HIGH or CRITICAL vulnerabilities
-                            // Uncomment the following lines if you want to enforce this
-                            /*
-                            def trivyStatus = bat(script: """
-                                "${env.TRIVY_PATH}" image --exit-code 1 --severity HIGH,CRITICAL ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
-                            """, returnStatus: true)
-                            if (trivyStatus != 0) {
-                                error "Trivy found vulnerabilities with HIGH or CRITICAL severity"
+
+                    stage('Scan Docker Image with Trivy') {
+                        steps {
+                            script {
+                                sh '''
+                                    set -eu
+                                    mkdir -p results
+                                    trivy image \
+                                        --format table \
+                                        --output results/trivy-results.txt \
+                                        "$DOCKER_IMAGE:$BUILD_NUMBER"
+                                    cat results/trivy-results.txt
+                                '''
                             }
-                            */
+                        }
+                        post {
+                            always {
+                                archiveArtifacts(
+                                    artifacts: 'results/trivy-results.txt',
+                                    allowEmptyArchive: true
+                                )
+                            }
                         }
                     }
-                    post {
-                        always {
-                        archiveArtifacts artifacts: "${TRIVY_RESULTS_FILE}", allowEmptyArchive: true
-                        }
-                    }
-                }
+
 
                
 
+
                 stage('Security Scanning with Terrascan') {
                     steps {
-                        script {
-                            dir("${env.TERRAFORM_CONFIG_PATH}") {
-                                echo "Running Terrascan to scan Dockerfile, Kubernetes YAML files, and Terraform code"
-                                bat """
-                                    "${env.TERRASCAN_PATH}" scan -d . -o json > ${RESULTS_DIR}\\terrascan-report.json || exit 0
-                                """
-                            }
+                        dir("${env.TERRAFORM_CONFIG_PATH}") {
+                            sh '''
+                                mkdir -p "$WORKSPACE/results"
+                                terrascan scan -d . -o json \
+                                    > "$WORKSPACE/results/terrascan-report.json"
+                            '''
                         }
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: "${RESULTS_DIR}\\terrascan-report.json", allowEmptyArchive: true
+                            archiveArtifacts(
+                                artifacts: 'results/terrascan-report.json',
+                                allowEmptyArchive: true
+                            )
                         }
                     }
                 }
+
+
 
                 stage('Infrastructure Cost Estimation with Infracost') {
                     steps {
                         dir("${env.TERRAFORM_CONFIG_PATH}") {
-                            withCredentials([string(credentialsId: 'infracost-api-key', variable: 'INFRACOST_API_KEY')]) {
-                                bat """
-                                    echo Running Infracost to estimate infrastructure costs...
-                                    "${env.INFRACOST_PATH}" breakdown --path . --show-skipped --out-file ${RESULTS_DIR}\\infracost-report.json || exit 0
-                                """
+                            withCredentials([
+                                string(
+                                    credentialsId: 'infracost-api-key',
+                                    variable: 'INFRACOST_API_KEY'
+                                )
+                            ]) {
+                                sh '''
+                                    mkdir -p "$WORKSPACE/results"
+                                    infracost breakdown \
+                                        --path . \
+                                        --show-skipped \
+                                        --out-file "$WORKSPACE/results/infracost-report.json"
+                                '''
                             }
                         }
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: "${RESULTS_DIR}\\infracost-report.json", allowEmptyArchive: true
+                            archiveArtifacts(
+                                artifacts: 'results/infracost-report.json',
+                                allowEmptyArchive: true
+                            )
                         }
                     }
                 }
+
             }
         }
 
@@ -303,7 +317,16 @@ pipeline {
 
                             bat "powershell -Command \"(Get-Content ${env.WORKSPACE}\\k8s\\deployment.yaml) -replace 'image: .*', 'image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}' | Set-Content ${env.WORKSPACE}\\k8s\\deployment.yaml\""
 
-                            def hasChanges = bat(script: 'git status --porcelain', returnStatus: true) == 0
+                            def changes = sh(
+                                script: 'git status --porcelain',
+                                returnStdout: true
+                            ).trim()
+                            
+                            if (changes) {
+                                echo "Changes detected; committing updates."
+                            } else {
+                                echo "No changes to commit."
+                            }
 
                             if (hasChanges) {
                                 withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
