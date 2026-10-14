@@ -183,12 +183,18 @@ pipeline {
                 }
 
 
+
                 stage('Security Scanning with Terrascan') {
                     steps {
                         dir("${env.TERRAFORM_CONFIG_PATH}") {
                             sh '''
+                                set -eu
                                 mkdir -p "$WORKSPACE/results"
-                                terrascan scan -d . -o json \
+                
+                                terrascan scan \
+                                    -t terraform \
+                                    -d . \
+                                    -o json \
                                     > "$WORKSPACE/results/terrascan-report.json"
                             '''
                         }
@@ -202,7 +208,6 @@ pipeline {
                         }
                     }
                 }
-
 
 
                 stage('Infrastructure Cost Estimation with Infracost') {
