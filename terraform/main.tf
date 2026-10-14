@@ -24,6 +24,7 @@ module "eks" {
   private_subnet_ids = module.vpc.private_subnet_ids
   team_prefix = var.team_prefix
   eks_control_plane_sg_id = module.vpc.eks_control_plane_sg_id
+  eks_nodes_sg_id = module.vpc.eks_nodes_sg_id
 }
 
 module "ec2" {
