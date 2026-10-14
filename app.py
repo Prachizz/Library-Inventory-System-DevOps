@@ -7,8 +7,10 @@ from prometheus_client.core import CollectorRegistry
 app = Flask(__name__)
 app.secret_key = "dasdasdgajksdgahskjdgasdgkahkas"
 
-DataBase = 'data/library.json'
-
+app.config['DATABASE'] = os.environ.get(
+    'LIBRARY_DATABASE',
+    'data/library.json'
+)
 # Prometheus metrics setup
 registry = CollectorRegistry()
 
@@ -18,15 +20,22 @@ REQUEST_LATENCY = Summary('request_latency_seconds', 'Request latency', ['method
 IN_PROGRESS = Gauge('in_progress_requests', 'In progress requests', ['endpoint'], registry=registry)
 
 def load_data():
-    """Load the database file and return its content. If file doesn't exist, return default data."""
-    if not os.path.exists(DataBase):
+    """Load library data from the configured database file."""
+    database = app.config['DATABASE']
+
+    if not os.path.exists(database):
         return {"books": [], "borrowed_books": []}
-    with open(DataBase, 'r') as f:
+
+    with open(database, 'r') as f:
         return json.load(f)
 
+
 def save_data(data):
-    """Save the provided data to the database file."""
-    with open(DataBase, 'w') as f:
+    """Save library data to the configured database file."""
+    database = app.config['DATABASE']
+    os.makedirs(os.path.dirname(database) or '.', exist_ok=True)
+
+    with open(database, 'w') as f:
         json.dump(data, f, indent=4)
 
 @app.route('/')
